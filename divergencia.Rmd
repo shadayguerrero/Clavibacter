@@ -1,0 +1,323 @@
+---
+title: "Clavibacter"
+author: "Shaday Guerrero-Flores"
+date: "2023-03-21"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Creamos base de datos en blastn
+
+```{bash}
+path_genomes=/home/shaday/clavibacter/genomes/genomas_seleccionados/output/archivos_separados/plasmidos
+
+path_out_db=/home/shaday/clavibacter/blast/database
+
+ls ${path_genomes}/*.fasta | while read line
+do
+name=$(basename ${line} .fasta)
+echo $name
+makeblastdb -in ${line} -out $path_out_db/$name -dbtype nucl -parse_seqids 
+done
+```
+
+## Corremos Blastn (NC_009480.1_Clavibacter_michiganensis_complete)
+```{bash}
+dir_database=/home/shaday/clavibacter/blast/database
+dir_out=/home/shaday/clavibacter/blast/outputs/clavi_diego/zea-mays
+#dir_reads=/home/shaday/clavibacter/reads/clavibacter_agave/fasta
+dir_reads=/datos/home/betterlab/diego/clavibacter/ex-reads-clavi/fasta/zea-mays
+ls $dir_reads/*fasta | while read line
+do
+name=$(basename $line .fasta)
+blastn -query ${line} -db ${dir_database}/NC_009480.1_Clavibacter_michiganensis_complete -outfmt "6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore sstrand" -out ${dir_out}/${name}
+done
+```
+## Corremos Blastn con scritp para los diversos genemos de referencia
+```{bash}
+#bash ../scripts/run_blast.sh NZ_CP011043.1_Clavibacter_insidiosus_chromosome, /home/shaday/clavibacter/reads/clavibacter_agave/fasta agave
+cat lista_genomas.txt | while read file
+do
+ls /datos/home/betterlab/diego/clavibacter/ex-reads-clavi/fasta/ | while read line
+do
+bash ../scripts/run_blast.sh $file /datos/home/betterlab/diego/clavibacter/ex-reads-clavi/fasta/$line $line
+done
+done
+```
+
+## Corremos Blastn (plamidos )
+```{bash}
+dir_database=/home/shaday/clavibacter/blast/database
+dir_out=/home/shaday/clavibacter/blast/outputs/GCF_000063485.1_Clavibacter_michiganensis_subsp._michiganensis_modificado
+dir_reads=/home/shaday/clavibacter/reads/clavibacter_agave/fasta
+ls $dir_reads/*fasta | while read line
+do
+name=$(basename $line .fasta)
+blastn -query ${line} -db ${dir_database}/GCF_000063485.1_Clavibacter_michiganensis_subsp._michiganensis_modificado -outfmt "6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore sstrand" -out ${dir_out}/${name}
+done
+```
+## Creamos base de datos en bowtie (pendiente)
+
+```{bash}
+path_genomes=/home/shaday/clavibacter/genomes/genomas_seleccionados/output/archivos_separados/genoma_completo
+
+path_out_db=/home/shaday/clavibacter/blast/database
+
+ls ${path_genomes}/*.fasta | while read line
+do
+name=$(basename ${line} .fasta)
+echo $name
+makeblastdb -in ${line} -out $path_out_db/$name -dbtype nucl -parse_seqids 
+done
+```
+
+## Corremos bowtie (pendiente)
+```{bash}
+dir_database=/home/shaday/clavibacter/blast/database
+dir_out=/home/shaday/clavibacter/blast/outputs/NC_009480.1_Clavibacter_michiganensis_complete
+dir_reads=/home/shaday/clavibacter/reads/clavibacter_agave/fasta
+ls $dir_reads/*fasta | while read line
+do
+name=$(basename $line .fasta)
+blastn -query ${line} -db ${dir_database}/NC_009480.1_Clavibacter_michiganensis_complete -outfmt 6 -out ${dir_out}/${name}
+done
+```
+
+
+```{r}
+blast_results <- read.table("~/clavibacter/blast/outputs/michiganencis-6/SRR4140275_agave_salmiana_magueyal-clav_1", header=FALSE)
+colnames(blast_results) <-c("query_id", "subject_id", "p_ident", "length", "mis_match", "gap_open","q_start", "q_end", "s_start", "s_end", "evalue","bit_score")
+library(reshape2)
+
+blast_results_melt <- melt(blast_results, id.vars=c("query_id", "subject_id", "q_start", "q_end", "s_start", "s_end", "evalue"))
+blast_results_filtered <- blast_results_melt[,c("query_id", "subject_id", "evalue")]
+
+
+```
+
+## Including Plots
+
+
+
+```{r pressure, echo=FALSE}
+library(Biostrings)
+library(circlize)
+library(data.table)
+library(dplyr)
+# cargar los datos blastn en formato tabular
+blastn <- read.table("~/clavibacter/blast/outputs/NC_009480.1_Clavibacter_michiganensis_complete/SRR11092512_solanum_lycopersicum_ags1-clav_1", header = FALSE, sep = "\t", stringsAsFactors = FALSE, col.names= c("qseqid", "sseqid", "pident", "length", "mismatch", "gapopen","qstart", "qend", "sstart", "send", "evalue","bitscore", "sstrand"))
+
+### para solo 2 archivos ###
+# Agregar una nueva columna a la tabla original con los valores "+"
+#blastn <- cbind(blastn, Strand)
+blastn_2 <- read.table("~/clavibacter/blast/outputs/NC_009480.1_Clavibacter_michiganensis_complete/SRR11092512_solanum_lycopersicum_ags1-clav_2", header = FALSE, sep = "\t", stringsAsFactors = FALSE, col.names= c("qseqid", "sseqid", "pident", "length", "mismatch", "gapopen","qstart", "qend", "sstart", "send", "evalue","bitscore", "sstrand"))
+#Strand <- rep("-", nrow(blastn_2))
+df2=rbind(blastn,blastn_2)
+
+# cargar el genoma de referencia en formato fasta
+genome <- readDNAStringSet("~/clavibacter/genomes/genomas_seleccionados/output/archivos_separados/genoma_completo/NC_009480.1_Clavibacter_michiganensis_complete.fasta")
+
+combine_tables <- function(folder_path) {
+  # List all files in the folder
+  file_names <- list.files(path = folder_path, full.names = TRUE)
+  
+  # Check if there are any files in the folder
+  if (length(file_names) == 0) {
+    stop("No files found in the folder.")
+  }
+  
+  # Read all tables and combine them
+  combined_table <- do.call(rbind, lapply(file_names, read.table, header = FALSE, col.names= c("qseqid", "sseqid", "pident", "length", "mismatch", "gapopen","qstart", "qend", "sstart", "send", "evalue","bitscore", "sstrand")))
+  
+  return(combined_table)
+}
+
+combined_table <- combine_tables("~/clavibacter/blast/outputs/NC_009480.1_Clavibacter_michiganensis_complete")
+  
+  
+
+
+# crear un objeto de cromosomas a partir del genoma de referencia
+chromosomes <- data.frame(start = c(1, cumsum(width(genome)[-length(genome)]) + 1), 
+                          end = cumsum(width(genome)), 
+                          label = names(genome))
+rownames(chromosomes) <- chromosomes$label
+
+df2 = combined_table[,c("sseqid", "sstart", "send", "sstrand")]
+#función para intercambiar "sstart" y "send" si "sstrand" es "minus"
+intercambiar_sstart_send <- function(df) {
+  for (i in 1:nrow(df)) {
+    if (df$sstrand[i] == "minus") {
+      temp <- df$sstart[i]
+      df$sstart[i] <- df$send[i]
+      df$send[i] <- temp
+    }
+  }
+  return(df)
+}
+df3 <- intercambiar_sstart_send(df2)
+
+#write.csv(df2, "prueba2.csv", row.names=TRUE)
+#df2<- read.csv("prueba.csv", header = TRUE)
+
+#temp=rename(df2,colnames(df))
+#df<-temp
+circos.clear()
+circos.initializeCircularGenome(chromosomes$label, genome_size = chromosomes$end)
+circos.genomicTrack(df3, ylim = c(0, 1), panel.fun = function(region, value, ...) {
+    circos.genomicLines(region, value = runif(nrow(region)), type = "segment", 
+        col = ifelse(value[, 1] == "plus", "Red", "blue"))
+})
+circos.export("circos.svg")
+
+```
+## Plasmidos ##
+```{r}
+
+# cargar el genoma de referencia en formato fasta
+genome <- readDNAStringSet("~/clavibacter/genomes/genomas_seleccionados/output/archivos_separados/plasmidos/NC_009478.1_Clavibacter_michiganensis_plasmid.fasta")
+
+
+combined_table_plasmid_1<- combine_tables("~/clavibacter/blast/outputs/NC_009478.1_Clavibacter_michiganensis_plasmid/")
+  
+# crear un objeto de cromosomas a partir del genoma de referencia
+chromosomes <- data.frame(start = c(1, cumsum(width(genome)[-length(genome)]) + 1), 
+                          end = cumsum(width(genome)), 
+                          label = names(genome))
+rownames(chromosomes) <- chromosomes$label
+
+df2_plasmid = combined_table_plasmid_1[,c("sseqid", "sstart", "send", "sstrand")]
+#función para intercambiar "sstart" y "send" si "sstrand" es "minus"
+
+df2_plasmid <- intercambiar_sstart_send(df2_plasmid)
+
+svg("plots/plamid_1.svg")
+circos.clear()
+circos.initializeCircularGenome(chromosomes$label, genome_size = chromosomes$end)
+circos.genomicTrack(df2_plasmid, ylim = c(0, 1), panel.fun = function(region, value, ...) {
+    circos.genomicLines(region, value = runif(nrow(region)), type = "segment", 
+        col = ifelse(value[, 1] == "plus", "Red", "blue"))
+})
+#circos.export("/plot/circos.svg")
+dev
+```
+## DEfinir funciones
+
+```{r}
+library(Biostrings)
+library(circlize)
+library(data.table)
+library(dplyr)
+
+intercambiar_sstart_send <- function(df) {
+  for (i in 1:nrow(df)) {
+    if (df$sstrand[i] == "minus") {
+      temp <- df$sstart[i]
+      df$sstart[i] <- df$send[i]
+      df$send[i] <- temp
+    }
+  }
+  return(df)
+}
+
+combine_tables <- function(folder_path) {
+  # List all files in the folder
+  file_names <- list.files(path = folder_path, full.names = TRUE)
+  
+  # Check if there are any files in the folder
+  if (length(file_names) == 0) {
+    stop("No files found in the folder.")
+  }
+  
+  # Read all tables and combine them
+  combined_table <- do.call(rbind, lapply(file_names, read.table, header = FALSE, col.names= c("qseqid", "sseqid", "pident", "length", "mismatch", "gapopen","qstart", "qend", "sstart", "send", "evalue","bitscore", "sstrand")))
+  
+  return(combined_table)
+}
+combine_tables2 <- function(folder_path,nombre_tabla) {
+  temp<-combine_tables(folder_path)
+  write.table(temp,paste0("tablas/",nombre_tabla))
+}
+
+plot_circular_read_genoma <- function(path_genoma_refencia,path_blast,nombre_plot){
+# cargar el genoma de referencia en formato fasta
+genome <- readDNAStringSet(path_genoma_refencia)
+combined_table_plasmid_temp<- combine_tables(path_blast)
+  
+# crear un objeto de cromosomas a partir del genoma de referencia
+chromosomes <- data.frame(start = c(1, cumsum(width(genome)[-length(genome)]) + 1), 
+                          end = cumsum(width(genome)), 
+                          label = names(genome))
+rownames(chromosomes) <- chromosomes$label
+
+df2_corted = combined_table_plasmid_temp[,c("sseqid", "sstart", "send", "sstrand")]
+#función para intercambiar "sstart" y "send" si "sstrand" es "minus"
+
+df2_corted <- intercambiar_sstart_send(df2_corted)
+
+svg(paste0("plots/",nombre_plot))
+circos.clear()
+circos.initializeCircularGenome(chromosomes$label, genome_size = chromosomes$end, plotType = c("axis","labels"))
+circos.genomicTrack(df2_corted, ylim = c(0, 1), panel.fun = function(region, value, ...) {
+    circos.genomicLines(region, value = runif(nrow(region)), type = "segment", 
+        col = ifelse(value[, 1] == "plus", "Red", "blue"))
+})
+# Añadir nombre del genoma de referencia
+#circos.text("Genoma de Referencia", facing = "inside", niceFacing = TRUE, cex = 2)
+
+dev.off()
+}
+```
+### Corrida de funciones ###
+```{r}
+plot_circular_read_genoma("~/clavibacter/genomes/genomas_seleccionados/output/archivos_separados/plasmidos/NC_009478.1_Clavibacter_michiganensis_plasmid.fasta","~/clavibacter/blast/outputs/NC_009478.1_Clavibacter_michiganensis_plasmid/","plamid_1.svg")
+#plot_circular_read_genoma("~/clavibacter/genomes/genomas_seleccionados/output/archivos_separados/plasmidos/NC_009479.1_Clavibacter_michiganensis_plasmid.fasta","~/clavibacter/blast/outputs/NC_009479.1_Clavibacter_michiganensis_plasmid/","plamid_2.svg")
+#plot_circular_read_genoma("~/clavibacter/genomes/genomas_seleccionados/output/archivos_separados/genoma_completo/NC_009480.1_Clavibacter_michiganensis_complete.fasta","~/clavibacter/blast/outputs/NC_009480.1_Clavibacter_michiganensis_complete/","CMM_genoma.svg")
+plot_circular_read_genoma("~/clavibacter/genomes/genomas_seleccionados/output/temp/GCF_000063485.1_Clavibacter_michiganensis_subsp._michiganensis_modificado.fna","~/clavibacter/blast/outputs/GCF_000063485.1_Clavibacter_michiganensis_subsp._michiganensis_modificado/","CMM_3.svg")
+```
+```{r}
+#/home/shaday/clavibacter/blast/outputs/capsicum
+plot_circular_read_genoma("~/clavibacter/genomes/genomas_seleccionados/output/archivos_separados/genoma_completo/NC_009480.1_Clavibacter_michiganensis_complete.fasta","~/clavibacter/blast/outputs/todos/","Clavibacter_to_Michiganensis.svg")
+##correr con otro genomas de clavibacter
+plot_circular_read_genoma("~/clavibacter/genomes/genomas_seleccionados/output/archivos_separados/genoma_completo/NZ_CP011043.1_Clavibacter_insidiosus_chromosome,.fasta","~/clavibacter/blast/outputs/NZ_CP011043.1_Clavibacter_insidiosus_chromosome,/todos/","Clavibacter_to_Insidiosus.svg")
+plot_circular_read_genoma("~/clavibacter/genomes/genomas_seleccionados/output/archivos_separados/genoma_completo/NZ_CP012573.1_Clavibacter_capsici_chromosome,.fasta","~/clavibacter/blast/outputs/NZ_CP012573.1_Clavibacter_capsici_chromosome,/todos/","Clavibacter_to_Capsici.svg")
+plot_circular_read_genoma("~/clavibacter/genomes/genomas_seleccionados/output/archivos_separados/genoma_completo/NZ_CP086346.1_Clavibacter_nebraskensis_chromosome,.fasta","~/clavibacter/blast/outputs/NZ_CP086346.1_Clavibacter_nebraskensis_chromosome,/todos/","Clavibacter_to_Nebraskensis.svg")
+plot_circular_read_genoma("~/clavibacter/genomes/genomas_seleccionados/output/archivos_separados/genoma_completo/NZ_CP088266.1_Clavibacter_sepedonicus_chromosome,.fasta","~/clavibacter/blast/outputs/NZ_CP088266.1_Clavibacter_sepedonicus_chromosome,/todos/","Clavibacter_to_Sepedonicus.svg")
+plot_circular_read_genoma("~/clavibacter/genomes/genomas_seleccionados/output/archivos_separados/NZ_MZMQ01000001.1_Clavibacter_tessellarius_33566.fasta","~/clavibacter/blast/outputs/NZ_MZMQ01000001.1_Clavibacter_tessellarius_33566/todos/","Clavibacter_to_tessellarius.svg")
+
+combine_tables2("~/clavibacter/blast/outputs/NZ_MZMQ01000001.1_Clavibacter_tessellarius_33566/todos/","Clavibacter_tessellarius")
+write.table(temp,"tablas/temp")
+subset(temp, pident > 80)
+```
+
+### Crear tablas de blast combinando todos los reads
+
+```{r}
+archivos <- list.files("~/clavibacter/blast/outputs/")
+for (elemento in archivos){combine_tables2(paste0("~/clavibacter/blast/outputs/",elemento,"/todos/"),elemento)} 
+```
+
+```{bash}
+ls ~/clavibacter/blast/outputs | while read line
+do
+cat ~/clavibacter/blast/outputs/$line/todos/* >> ~/clavibacter/Clavibacter/tablas/all-blast.txt
+done
+```
+### read all-bast
+```{r}
+blastn <- read.table("~/clavibacter/Clavibacter/tablas/all-blast.txt", header = FALSE, sep = "\t", stringsAsFactors = FALSE, col.names= c("qseqid", "sseqid", "pident", "length", "mismatch", "gapopen","qstart", "qend", "sstart", "send", "evalue","bitscore", "sstrand"))
+
+dic <- list()
+Reads <- unique(blastn$qseqid)
+for (i in seq_along(Reads)) {
+  k <- Reads[i]
+  indices <- which(blastn$sseqid == k)
+  valores <- blastn[indices, 2]
+  dic[[i]] <- list(qseqid = k, indices = indices, valores = valores)
+}
+
+```
+
